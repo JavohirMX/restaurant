@@ -1,0 +1,24 @@
+{
+  "currency": "TODO e.g. USD",
+  "categories": [
+    {
+      "id": "starters",
+      "name": "Starters",
+      "sort": 10,
+      "items": [
+        {
+          "id": "example-bruschetta",
+          "name": "TODO Item name",
+          "description": "TODO Short description (optional but recommended).",
+          "tags": ["vegetarian"],
+          "photos": ["TODO optional filename e.g. bruschetta.jpg"],
+          "sort": 10,
+          "variants": [
+            { "name": "Regular", "priceCents": 1200, "sort": 10 }
+          ]
+        }
+      ]
+    }
+  ]
+}
+

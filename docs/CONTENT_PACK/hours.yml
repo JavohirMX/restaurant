@@ -1,0 +1,18 @@
+timezone: "TODO e.g. America/New_York"
+
+# Service periods support multiple windows per day.
+# Time format: "HH:MM" (24-hour).
+# days: mon,tue,wed,thu,fri,sat,sun
+servicePeriods:
+  - name: "Lunch"
+    days: ["tue", "wed", "thu", "fri"]
+    opensAt: "11:00"
+    closesAt: "15:00"
+  - name: "Dinner"
+    days: ["tue", "wed", "thu", "fri", "sat"]
+    opensAt: "17:00"
+    closesAt: "22:00"
+
+# Optional: if a day is fully closed, just omit it from all periods.
+# Future (not MVP): specialDates/holidays overrides.
+

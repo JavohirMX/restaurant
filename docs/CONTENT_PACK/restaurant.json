@@ -1,0 +1,38 @@
+{
+  "name": "TODO Restaurant Name",
+  "tagline": "TODO Short tagline",
+  "description": "TODO 1-3 sentences about the restaurant.",
+  "timezone": "TODO e.g. America/New_York",
+  "contact": {
+    "phone": "TODO",
+    "publicEmail": "TODO",
+    "staffInboxEmail": "TODO (all staff notifications go here)"
+  },
+  "location": {
+    "addressLine1": "TODO",
+    "addressLine2": "",
+    "city": "TODO",
+    "region": "TODO State/Province",
+    "postalCode": "TODO",
+    "country": "TODO",
+    "googleMapsEmbedUrl": "TODO (embed URL, not a shortlink)",
+    "geo": { "lat": 0.0, "lng": 0.0 }
+  },
+  "social": {
+    "instagram": "",
+    "facebook": "",
+    "tiktok": "",
+    "x": "",
+    "youtube": "",
+    "website": ""
+  },
+  "branding": {
+    "logoFile": "TODO e.g. logo.png",
+    "primaryColorHex": "#000000",
+    "secondaryColorHex": "#ffffff"
+  },
+  "analytics": {
+    "ga4MeasurementId": ""
+  }
+}
+
