@@ -6,10 +6,53 @@ Auth model per `PLAN.md`: JWT access/refresh for staff/admin endpoints.
 
 ## Conventions
 
-- **Timestamps**: ISO 8601, timezone-aware (UTC in API, convert to restaurant timezone in UI).
-- **Errors**: consistent shape:
-  - `{"error":"code","message":"Human readable","details":{...}}`
-- **Pagination** (for lists): `page`, `pageSize`, `total` (exact style TBD).
+### Timestamps
+- ISO 8601 format, timezone-aware (UTC in API responses)
+- Convert to restaurant timezone in UI for display
+
+### Error Schema
+All error responses use this consistent shape:
+```json
+{
+  "error": "VALIDATION_ERROR",
+  "message": "Human readable message",
+  "details": {
+    "field_name": ["error message"]
+  }
+}
+```
+
+**Standard Error Codes**:
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `VALIDATION_ERROR` | 400 | Invalid request data |
+| `UNAUTHORIZED` | 401 | Missing or invalid authentication |
+| `FORBIDDEN` | 403 | Authenticated but not permitted |
+| `NOT_FOUND` | 404 | Resource not found |
+| `CONFLICT` | 409 | Resource conflict (e.g., capacity exceeded) |
+| `RATE_LIMITED` | 429 | Too many requests |
+| `INTERNAL_ERROR` | 500 | Server error |
+
+### Pagination
+All list endpoints return paginated responses:
+```json
+{
+  "data": [...],
+  "pagination": {
+    "page": 1,
+    "pageSize": 20,
+    "total": 150,
+    "totalPages": 8
+  }
+}
+```
+- Default `pageSize`: 20
+- Maximum `pageSize`: 100
+- Query params: `page` (1-indexed), `pageSize`
+
+### Filtering
+- Query params use explicit naming: `status=pending`, `from=2024-01-01`, `to=2024-01-31`
+- Multiple values use comma separation: `status=pending,confirmed`
 
 ## Public (read-only)
 
@@ -60,12 +103,14 @@ Query params: `page`, `pageSize` (optional), maybe `q` later.
 **200**
 
 - title, slug
-- body (TipTap JSON or HTML; pick one for implementation)
-- cover image
+- bodyHtml (pre-rendered HTML for public display)
+- coverImageUrl
 - publishedAt
-- SEO fields (optional)
+- seo: { metaTitle, metaDescription } (optional)
 
 **404** if not found/unpublished
+
+> **Note**: Blog body is stored as TipTap JSON internally. Public API returns pre-rendered `bodyHtml`. Admin API returns both `bodyJson` (for editing) and `bodyHtml` (for preview).
 
 ### `GET /api/public/reservations/availability?date=YYYY-MM-DD`
 
@@ -176,7 +221,7 @@ CRUD endpoints (exact resource naming can be normalized during implementation):
 - `/api/admin/menu/variants`
 - `/api/admin/gallery`
 - `/api/admin/testimonials`
-- `/api/admin/blog`
+- `/api/admin/blog` (returns `bodyJson` for editing + `bodyHtml` for preview)
 - `/api/admin/hours`
 - `/api/admin/reservation-settings`
 

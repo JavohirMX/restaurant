@@ -17,14 +17,28 @@ Reusable **single-restaurant** website template (intended to be reused via **sep
 - **Language**: English only for MVP (structured to add i18n later).
 - **Local-first**: develop/run locally for now; design with future deployment in mind.
 
+## Non-Goals (v1)
+- No multi-restaurant support (single tenant per deployment)
+- No table/seating management (just total guest capacity per slot)
+- No waitlist functionality
+- No payment processing or deposits
+- No SMS notifications (email only)
+- No i18n/multi-language (English only, structured for future)
+- No advanced reporting/analytics dashboard
+- No reservation reminders (background jobs scaffolded but not implemented)
+
 ## Key Decisions Locked In
 - **Frontend framework**: Next.js
 - **API auth**: JWT access/refresh
 - **Admin permissions**: roles `admin` / `manager` / `host` / `editor`
 - **Database**: Postgres now
-- **Blog editor**: TipTap rich text
+- **Blog editor**: TipTap rich text (stored as JSON, rendered to HTML for display)
 - **Spam protection**: basic rate limiting + optional honeypot
-- **Analytics**: GA4 via env var (enabled only when configured)
+- **Analytics**: GA4 via `NEXT_PUBLIC_GA4_ID` env var (enabled only when configured)
+- **Integrations**:
+  - **Email**: SMTP provider (SendGrid/Mailgun/etc.) via env vars; console backend for dev
+  - **Maps**: Google Maps Embed API (embed URL stored in restaurant settings)
+  - **Analytics**: GA4 measurement ID via environment variable
 - **Reservations**:
   - Availability limited by **per-timeslot max guests**
   - **Slot interval**: 30 minutes (configurable)

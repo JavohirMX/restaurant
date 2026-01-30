@@ -1,16 +1,16 @@
 # Reservation Policy Spec (MVP)
 
-This document turns the reservation “knobs” from `PLAN.md` into concrete, testable requirements.
+This document turns the reservation "knobs" from `PLAN.md` into concrete, testable requirements.
 
 ## Core configuration (defaults)
 
 - **slotIntervalMinutes**: 30
 - **turnTimeMinutes**: 90
-- **maxGuestsPerSlot**: TODO (capacity per slot, across confirmed reservations only)
-- **maxPartySizeOnline**: TODO
-- **requirePhone**: true/false (TODO)
-- **minLeadTimeMinutes**: TODO (e.g. 120)
-- **maxDaysAhead**: TODO (e.g. 30)
+- **maxGuestsPerSlot**: 40 (capacity per slot, across confirmed reservations only)
+- **maxPartySizeOnline**: 8 (larger parties must call to book)
+- **requirePhone**: true
+- **minLeadTimeMinutes**: 120 (2 hours minimum notice)
+- **maxDaysAhead**: 30 (1 month booking window)
 
 ## Availability & capacity rules
 
@@ -38,25 +38,29 @@ This document turns the reservation “knobs” from `PLAN.md` into concrete, te
 If any trigger matches, create/convert to `pending` and notify staff.
 
 ### Trigger: party size threshold
-- If `party_size` > **approvalPartySizeThreshold** (TODO) → `pending`
+- If `party_size` > **approvalPartySizeThreshold** (6) → `pending`
+- Parties of 7 or more require staff approval
 
 ### Trigger: same-day
-- If reservation is for “today” in restaurant timezone and current time is within **sameDayWindowHours** (TODO) of the requested start time → `pending`
+- If reservation is for "today" in restaurant timezone and current time is within **sameDayWindowHours** (4) of the requested start time → `pending`
+- Same-day bookings within 4 hours of start time require approval
 
 ### Trigger: configured time windows
-- If requested start time falls within any “manual approval” windows (TODO define) → `pending`
+- If requested start time falls within any "manual approval" windows → `pending`
+- Admin can configure specific time windows (e.g., holiday periods) that always require approval
+- Default: no configured windows (empty list)
 
 ### Trigger: near-capacity
-- If confirming would bring any overlapped slot to ≥ **nearCapacityPercent** (TODO, e.g. 85%) utilization:
+- If confirming would bring any overlapped slot to ≥ **nearCapacityPercent** (85%) utilization:
   - utilization = (sum(confirmed.party_size) + requested.party_size) / maxGuestsPerSlot
-  - if utilization ≥ threshold → `pending`
+  - if utilization ≥ 85% → `pending`
 
 ## Guest modify/cancel via token
 
 - Guest receives a **secure token link** (token is unguessable).
 - Guest can:
   - **View** reservation details
-  - **Modify**: party size, start time, contact info, notes (exact fields TBD but should include at least time + party size)
+  - **Modify**: party size, start time, contact info, notes (at minimum: time + party size)
   - **Cancel**
 - **Modification re-check**:
   - Re-run capacity checks and approval triggers.
@@ -65,7 +69,7 @@ If any trigger matches, create/convert to `pending` and notify staff.
 
 ## Token constraints
 
-- Tokens should have an **expiry** (recommended default: TODO, e.g. 30 days after reservation start).
+- Tokens should have an **expiry**: 30 days after reservation start.
 - Token should be invalid once reservation is `cancelled`.
 - Token should be rotateable (optional later) but not required for MVP.
 
@@ -84,11 +88,10 @@ If any trigger matches, create/convert to `pending` and notify staff.
 
 ## Abuse protections (MVP)
 
-- Rate limit reservation creation endpoint (exact limits TBD; define once traffic expectations are known).
-- Optional honeypot field on reservation form.
+- Rate limit reservation creation endpoint: 10 requests/minute, 50/hour per IP.
+- Optional honeypot field on reservation form (`website` field, reject if filled).
 
 ## Policy copy source
 
 Guest-facing language should come from:
 - `docs/CONTENT_PACK/reservation_copy.md`
-
