@@ -1,0 +1,21 @@
+[project]
+name = "restaurant-backend"
+version = "0.1.0"
+description = "Django backend for restaurant website template"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.0",
+    "djangorestframework>=3.14",
+    "djangorestframework-simplejwt>=5.3",
+    "django-cors-headers>=4.3",
+    "django-ratelimit>=4.1",
+    "psycopg[binary]>=3.1",
+    "python-dotenv>=1.0",
+    "pillow>=10.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0",
+    "pytest-django>=4.5",
+]

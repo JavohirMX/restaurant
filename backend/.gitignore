@@ -1,0 +1,18 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django
+*.log
+media/
+staticfiles/
+
+# Testing
+.pytest_cache/
+.coverage
+
+# Local env
+.env
+.env.*
+
