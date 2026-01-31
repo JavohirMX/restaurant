@@ -26,7 +26,6 @@ class CursorPagination(DRF_CursorPagination):
             "pagination": {
                 "next": self.get_next_link(),
                 "previous": self.get_previous_link(),
-                "count": self.page.paginator.count,
             },
         })
 

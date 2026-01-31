@@ -386,7 +386,14 @@ class GalleryImageDetailView(APIView):
             image.sort_order = request.data["sort_order"]
         
         if "is_published" in request.data:
-            image.is_published = request.data["is_published"]
+            new_published = request.data["is_published"]
+            # Validate alt text before publishing
+            if new_published and (not image.alt_text or not image.alt_text.strip()):
+                return Response(
+                    {"error": "VALIDATION_ERROR", "message": "Alt text is required before publishing.", "details": {}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            image.is_published = new_published
         
         image.save()
         return Response({"message": "Gallery image updated successfully."})
