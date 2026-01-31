@@ -153,12 +153,14 @@ class ReservationListView(generics.ListAPIView):
     def list(self, request: Request, *args, **kwargs):
         """List reservations with pagination."""
         queryset = self.filter_queryset(self.get_queryset())
-        
+
+        # Use pagination
         page = self.paginate_queryset(queryset)
         if page is not None:
             data = self._serialize_reservations(page)
             return self.get_paginated_response(data)
-        
+
+        # If pagination is disabled or not applicable, return all results
         data = self._serialize_reservations(queryset)
         return Response({"reservations": data})
     

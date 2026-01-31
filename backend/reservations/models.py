@@ -157,7 +157,7 @@ class ReservationToken(BaseModel):
     reservation = models.OneToOneField(
         Reservation,
         on_delete=models.CASCADE,
-        related_name="token",
+        related_name="tokens",
     )
     token = models.CharField(
         max_length=64,
@@ -192,9 +192,12 @@ class ReservationToken(BaseModel):
 
     @classmethod
     def get_by_token(cls, token_string):
-        """Get a valid token by its string value, or None if invalid/expired."""
+        """Get a token by its string value, or None if not found.
+        
+        Note: This returns the token even if expired or cancelled.
+        Callers should check is_valid if they need to validate.
+        """
         try:
-            token = cls.objects.select_related("reservation").get(token=token_string)
-            return token if token.is_valid else None
+            return cls.objects.select_related("reservation").get(token=token_string)
         except cls.DoesNotExist:
             return None

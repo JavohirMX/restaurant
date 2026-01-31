@@ -4,10 +4,13 @@ Public views for the reservations app.
 Provides public access to reservation availability and booking.
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
+from django.db.models import Q
 from django.utils import timezone
+from django_ratelimit.decorators import ratelimit
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
@@ -15,6 +18,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from reservations.models import Reservation, ReservationSettings, ReservationToken
+
+logger = logging.getLogger(__name__)
 
 
 class AvailabilityView(APIView):
@@ -25,6 +30,8 @@ class AvailabilityView(APIView):
     - date: YYYY-MM-DD format
     
     Returns available time slots with capacity information.
+    
+    Rate limited to 30/min per IP.
     """
     
     permission_classes = [AllowAny]
@@ -117,25 +124,25 @@ class AvailabilityView(APIView):
         
         return slots
     
-    def _check_capacity(self, starts_at: datetime, settings: ReservationSettings) -> dict:
+    def _check_capacity(self, starts_at: datetime, reservation_settings: ReservationSettings) -> dict:
         """Check capacity for a given slot."""
         # Get all confirmed reservations that overlap with this slot
         # A reservation overlaps if it starts before the slot ends and ends after the slot starts
-        slot_end = starts_at + timedelta(minutes=settings.turn_time_minutes)
+        slot_end = starts_at + timedelta(minutes=reservation_settings.turn_time_minutes)
         
         overlapping = Reservation.objects.filter(
             status=Reservation.Status.CONFIRMED,
             starts_at__lt=slot_end,
         ).filter(
             # Ends after slot starts (starts_at + turn_time > starts_at)
-            starts_at__gt=starts_at - timedelta(minutes=settings.turn_time_minutes),
+            starts_at__gt=starts_at - timedelta(minutes=reservation_settings.turn_time_minutes),
         )
         
         total_guests = sum(r.party_size for r in overlapping)
-        remaining = settings.max_guests_per_slot - total_guests
+        remaining = reservation_settings.max_guests_per_slot - total_guests
         
-        utilization = total_guests / settings.max_guests_per_slot if settings.max_guests_per_slot > 0 else 0
-        near_capacity = utilization >= (settings.near_capacity_percent / 100)
+        utilization = total_guests / reservation_settings.max_guests_per_slot if reservation_settings.max_guests_per_slot > 0 else 0
+        near_capacity = utilization >= (reservation_settings.near_capacity_percent / 100)
         
         return {
             "available": remaining > 0,
@@ -185,6 +192,9 @@ class ReservationCreateView(APIView):
         # Parse starts_at
         try:
             starts_at = datetime.fromisoformat(request.data["starts_at"].replace("Z", "+00:00"))
+            # Ensure timezone-aware
+            if starts_at.tzinfo is None:
+                starts_at = timezone.make_aware(starts_at)
         except (ValueError, AttributeError):
             return Response(
                 {"error": "VALIDATION_ERROR", "message": "Invalid starts_at format. Use ISO 8601.", "details": {}},
@@ -235,7 +245,19 @@ class ReservationCreateView(APIView):
                 "guest_email": guest_data["email"],
             },
         )
-        
+
+        # Send email notification
+        try:
+            from core.tasks import queue_reservation_email, queue_staff_notification
+            email_type = "confirmed" if status_choice == Reservation.Status.CONFIRMED else "pending"
+            queue_reservation_email(str(reservation.id), email_type)
+
+            # Notify staff if pending
+            if status_choice == Reservation.Status.PENDING:
+                queue_staff_notification(str(reservation.id), "new_pending")
+        except Exception as e:
+            logger.error(f"Failed to queue email notification: {e}")
+
         return Response({
             "reservation": {
                 "id": str(reservation.id),
@@ -331,8 +353,15 @@ class ReservationDetailView(APIView):
         
         if not token_obj:
             return Response(
-                {"error": "NOT_FOUND", "message": "Invalid or expired token.", "details": {}},
+                {"error": "NOT_FOUND", "message": "Invalid token.", "details": {}},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        
+        # Check if token is valid (not expired and reservation not cancelled)
+        if not token_obj.is_valid:
+            return Response(
+                {"error": "GONE", "message": "Token has expired or reservation is cancelled.", "details": {}},
+                status=status.HTTP_410_GONE,
             )
         
         reservation = token_obj.reservation
@@ -383,26 +412,79 @@ class ReservationModifyView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
         
+        settings = ReservationSettings.get_instance()
+        
         # Track changes
         changes = {}
         
         # Update allowed fields
         if "party_size" in request.data:
             old_size = reservation.party_size
-            reservation.party_size = request.data["party_size"]
+            new_size = request.data["party_size"]
+            
+            # Validate party size constraint
+            if new_size > settings.max_party_size_online:
+                return Response(
+                    {
+                        "error": "VALIDATION_ERROR",
+                        "message": f"Online bookings are limited to {settings.max_party_size_online} guests.",
+                        "details": {"party_size": [f"Maximum party size is {settings.max_party_size_online}"]},
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            
+            reservation.party_size = new_size
             changes["party_size"] = {"from": old_size, "to": reservation.party_size}
         
         if "starts_at" in request.data:
             try:
                 old_time = reservation.starts_at
-                reservation.starts_at = datetime.fromisoformat(
+                new_starts_at = datetime.fromisoformat(
                     request.data["starts_at"].replace("Z", "+00:00")
                 )
+                
+                # Validate min lead time
+                if new_starts_at < timezone.now() + timedelta(minutes=settings.min_lead_time_minutes):
+                    return Response(
+                        {
+                            "error": "VALIDATION_ERROR",
+                            "message": f"Reservations must be made at least {settings.min_lead_time_minutes} minutes in advance.",
+                            "details": {"starts_at": ["Insufficient lead time"]},
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                
+                # Validate max days ahead
+                max_date = timezone.now() + timedelta(days=settings.max_days_ahead)
+                if new_starts_at > max_date:
+                    return Response(
+                        {
+                            "error": "VALIDATION_ERROR",
+                            "message": f"Reservations can only be made up to {settings.max_days_ahead} days in advance.",
+                            "details": {"starts_at": ["Too far in advance"]},
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                
+                reservation.starts_at = new_starts_at
                 changes["starts_at"] = {"from": old_time.isoformat(), "to": reservation.starts_at.isoformat()}
             except (ValueError, AttributeError):
                 return Response(
                     {"error": "VALIDATION_ERROR", "message": "Invalid starts_at format.", "details": {}},
                     status=status.HTTP_400_BAD_REQUEST,
+                )
+        
+        # Validate capacity if party_size or starts_at changed
+        if "party_size" in changes or "starts_at" in changes:
+            capacity_error = self._validate_capacity(reservation, settings)
+            if capacity_error:
+                return Response(
+                    {
+                        "error": "CONFLICT",
+                        "message": "Capacity exceeded for requested time.",
+                        "details": {"capacity": [capacity_error]},
+                    },
+                    status=status.HTTP_409_CONFLICT,
                 )
         
         if "guest" in request.data:
@@ -422,7 +504,6 @@ class ReservationModifyView(APIView):
             reservation.notes = request.data["notes"]
         
         # Re-evaluate status based on changes
-        settings = ReservationSettings.get_instance()
         new_status = self._reevaluate_status(reservation, settings)
         if new_status != reservation.status:
             changes["status"] = {"from": reservation.status, "to": new_status}
@@ -440,7 +521,18 @@ class ReservationModifyView(APIView):
             entity_id=reservation.id,
             metadata={"changes": changes},
         )
-        
+
+        # Send email notification
+        try:
+            from core.tasks import queue_reservation_email, queue_staff_notification
+            queue_reservation_email(str(reservation.id), "modified")
+
+            # Notify staff if now pending
+            if new_status == Reservation.Status.PENDING:
+                queue_staff_notification(str(reservation.id), "new_pending")
+        except Exception as e:
+            logger.error(f"Failed to queue email notification: {e}")
+
         return Response({
             "reservation": {
                 "id": str(reservation.id),
@@ -467,6 +559,31 @@ class ReservationModifyView(APIView):
         
         # If no triggers match, confirm it
         return Reservation.Status.CONFIRMED
+    
+    def _validate_capacity(self, reservation: Reservation, settings: ReservationSettings) -> str | None:
+        """
+        Validate that the reservation fits within capacity.
+
+        Returns:
+            Error message if capacity exceeded, None if OK
+        """
+        # Get all confirmed reservations that overlap with this slot
+        # Exclude the current reservation itself
+        slot_end = reservation.starts_at + timedelta(minutes=settings.turn_time_minutes)
+
+        overlapping = Reservation.objects.filter(
+            status=Reservation.Status.CONFIRMED,
+            starts_at__lt=slot_end,
+            starts_at__gt=reservation.starts_at - timedelta(minutes=settings.turn_time_minutes),
+        ).exclude(id=reservation.id)
+
+        total_guests = sum(r.party_size for r in overlapping) + reservation.party_size
+
+        if total_guests > settings.max_guests_per_slot:
+            remaining = settings.max_guests_per_slot - sum(r.party_size for r in overlapping)
+            return f"Only {remaining} seats available for this time slot"
+
+        return None
 
 
 class ReservationCancelView(APIView):
@@ -509,6 +626,11 @@ class ReservationCancelView(APIView):
             entity_id=reservation.id,
             metadata={"reason": request.data.get("reason", "Guest cancelled via token")},
         )
+        
+        # Send email notifications
+        from core.tasks import queue_reservation_email, queue_staff_notification
+        queue_reservation_email(str(reservation.id), "cancelled")
+        queue_staff_notification(str(reservation.id), "cancelled")
         
         return Response({
             "reservation": {
