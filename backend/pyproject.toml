@@ -18,4 +18,9 @@ dependencies = [
 dev-dependencies = [
     "pytest>=8.0",
     "pytest-django>=4.5",
+    "factory-boy>=3.3",
+    "freezegun>=1.4",
+    "responses>=0.25",
+    "coverage>=7.4",
+    "django-q2>=1.6",
 ]
