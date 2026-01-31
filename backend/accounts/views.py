@@ -12,11 +12,11 @@ from django.conf import settings
 from django.contrib.auth import login, logout
 from django_ratelimit.decorators import ratelimit
 from rest_framework import status
-from rest_framework.exceptions import TokenError, InvalidToken
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import User
@@ -60,24 +60,31 @@ def log_audit_event(
 class LoginView(APIView):
     """
     Login endpoint for staff users.
-    
+
     Accepts email and password, returns JWT tokens on success.
     Rate limited to prevent brute force attacks.
     """
-    
+
     permission_classes = [AllowAny]
-    
+
     @ratelimit(key='ip', rate='5/m', method='POST')
     def post(self, request: Request) -> Response:
         """Handle login request."""
         client_ip = get_client_ip(request)
-        
+
         serializer = LoginSerializer(
             data=request.data,
             context={"request": request},
         )
-        
+
         if not serializer.is_valid():
+            # Check if this is a validation error (missing fields) or auth error
+            error_code = None
+            for field_errors in serializer.errors.values():
+                if field_errors:
+                    error_code = field_errors[0].code
+                    break
+
             # Log failed login attempt
             email = request.data.get("email", "unknown")
             log_audit_event(
@@ -92,14 +99,26 @@ class LoginView(APIView):
             logger.warning(
                 f"Failed login attempt for {email} from {client_ip}"
             )
-            return Response(
-                {
-                    "error": "UNAUTHORIZED",
-                    "message": "Invalid email or password.",
-                    "details": serializer.errors,
-                },
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+
+            # Return 400 for missing fields, 401 for invalid credentials
+            if error_code == "required":
+                return Response(
+                    {
+                        "error": "VALIDATION_ERROR",
+                        "message": "Missing required fields.",
+                        "details": serializer.errors,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            else:
+                return Response(
+                    {
+                        "error": "UNAUTHORIZED",
+                        "message": "Invalid email or password.",
+                        "details": serializer.errors,
+                    },
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
         
         user = serializer.validated_data["user"]
         
