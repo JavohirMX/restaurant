@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    "django_q",
     # Local apps
     "core",
     "accounts",
@@ -280,3 +281,33 @@ if not DEBUG:
 JWT_SECRET = os.getenv("JWT_SECRET")
 if not JWT_SECRET and not DEBUG:
     raise ValueError("JWT_SECRET must be set in production for defense in depth")
+
+# Email Configuration
+EMAIL_BACKEND_TYPE = os.getenv("EMAIL_BACKEND_TYPE", "console")  # "console" or "smtp"
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@restaurant.local")
+STAFF_EMAIL = os.getenv("STAFF_EMAIL", "")  # Staff notification inbox
+
+# Email backend selection based on type
+if EMAIL_BACKEND_TYPE == "console":
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+# SMTP Configuration (when EMAIL_BACKEND_TYPE=smtp)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() in ("true", "1", "yes")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+
+# Django-Q Configuration
+Q_CLUSTER = {
+    "name": "restaurant",
+    "workers": 4,
+    "recycle": 500,
+    "timeout": 90,
+    "retry": 120,
+    "queue_limit": 50,
+    "bulk": 10,
+    "orm": "default",  # Use Django ORM as broker
+}
