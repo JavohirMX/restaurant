@@ -99,4 +99,10 @@ Even before writing code, plan for:
 
 ## Launch checklist
 
-- [ ] Domain points to VPS\n+- [ ] Reverse proxy obtains certificates\n+- [ ] Backups scheduled + verified\n+- [ ] Admin account created\n+- [ ] Staff inbox email sending verified\n+- [ ] Reservation email flows verified\n+- [ ] Basic monitoring in place\n+
+- [ ] Domain points to VPS
+- [ ] Reverse proxy obtains certificates
+- [ ] Backups scheduled + verified
+- [ ] Admin account created
+- [ ] Staff inbox email sending verified
+- [ ] Reservation email flows verified
+- [ ] Basic monitoring in place
