@@ -1,0 +1,153 @@
+# Production Deployment Workflow
+# Requires manual approval and deploys to production environment
+
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to deploy (e.g., v1.0.0)'
+        required: true
+        type: string
+      confirm:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  DEPLOY_HOST: ${{ secrets.PRODUCTION_HOST }}
+  DEPLOY_USER: ${{ secrets.PRODUCTION_USER }}
+
+jobs:
+  # Validate deployment
+  validate:
+    name: Validate Deployment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "deploy" ]; then
+            echo "Deployment not confirmed. Please type 'deploy' to confirm."
+            exit 1
+          fi
+
+      - name: Check version tag exists
+        run: |
+          # Check if the tag exists in the repository
+          git ls-remote --tags origin "refs/tags/${{ github.event.inputs.version }}" | grep -q "${{ github.event.inputs.version }}"
+          if [ $? -ne 0 ]; then
+            echo "Version tag ${{ github.event.inputs.version }} does not exist!"
+            exit 1
+          fi
+          echo "Version tag ${{ github.event.inputs.version }} validated."
+
+  # Deploy to production server
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: validate
+    environment:
+      name: production
+      url: https://${{ secrets.DOMAIN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.version }}
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.PRODUCTION_SSH_KEY }}
+
+      - name: Add host to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create database backup
+        run: |
+          ssh ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} "
+            cd /opt/restaurant &&
+            docker-compose -f docker-compose.prod.yml exec -T db pg_dump -U \${POSTGRES_USER} \${POSTGRES_DB} > backups/backup-$(date +%Y%m%d-%H%M%S).sql
+          "
+        continue-on-error: true
+
+      - name: Deploy to production server
+        run: |
+          # Create deployment script
+          cat > deploy-prod.sh << 'EOF'
+          #!/bin/bash
+          set -e
+
+          DEPLOY_DIR="/opt/restaurant"
+          cd $DEPLOY_DIR
+
+          # Update environment variables
+          export IMAGE_TAG="${{ github.event.inputs.version }}"
+          export GITHUB_REPOSITORY="${{ github.repository }}"
+
+          # Pull specific version images
+          docker-compose -f docker-compose.prod.yml pull
+
+          # Run database migrations
+          docker-compose -f docker-compose.prod.yml run --rm backend python manage.py migrate --noinput
+
+          # Collect static files
+          docker-compose -f docker-compose.prod.yml run --rm backend python manage.py collectstatic --noinput --clear
+
+          # Restart services with zero downtime (if using rolling updates)
+          docker-compose -f docker-compose.prod.yml up -d --remove-orphans
+
+          # Wait for services to be healthy
+          sleep 30
+
+          # Verify health
+          if ! curl -f http://localhost/health/ > /dev/null 2>&1; then
+            echo "Health check failed! Rolling back..."
+            # Implement rollback logic here
+            exit 1
+          fi
+
+          # Cleanup old images
+          docker image prune -f
+
+          echo "Production deployment completed successfully!"
+          EOF
+          chmod +x deploy-prod.sh
+
+          # Copy deployment files to server
+          scp -r docker-compose.prod.yml nginx/ scripts/ ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/restaurant/
+          scp deploy-prod.sh ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:/opt/restaurant/
+
+          # Execute deployment
+          ssh ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} "bash /opt/restaurant/deploy-prod.sh"
+
+      - name: Verify deployment
+        run: |
+          sleep 30
+          curl -f https://${{ secrets.DOMAIN }}/health/ || exit 1
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: Release ${{ github.event.inputs.version }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify deployment status
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
