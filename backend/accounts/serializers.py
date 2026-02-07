@@ -60,12 +60,13 @@ class UserCreateSerializer(serializers.ModelSerializer):
     
     password = serializers.CharField(
         write_only=True,
-        min_length=8,
-        help_text="Password must be at least 8 characters",
+        min_length=12,
+        help_text="Password must be at least 12 characters",
     )
     password_confirm = serializers.CharField(
         write_only=True,
-        help_text="Confirm the password",
+        min_length=12,
+        help_text="Confirm the password (min 12 characters)",
     )
     
     class Meta:
@@ -204,8 +205,8 @@ class PasswordChangeSerializer(serializers.Serializer):
     )
     new_password = serializers.CharField(
         write_only=True,
-        min_length=8,
-        help_text="New password (min 8 characters)",
+        min_length=12,
+        help_text="New password (min 12 characters)",
     )
     new_password_confirm = serializers.CharField(
         write_only=True,

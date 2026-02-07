@@ -10,6 +10,7 @@ from typing import Any
 
 from django.conf import settings
 from django.contrib.auth import login, logout
+from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -67,7 +68,7 @@ class LoginView(APIView):
 
     permission_classes = [AllowAny]
 
-    @ratelimit(key='ip', rate='5/m', method='POST')
+    @method_decorator(ratelimit(key="ip", rate="5/m", method="POST"))
     def post(self, request: Request) -> Response:
         """Handle login request."""
         client_ip = get_client_ip(request)
@@ -96,9 +97,7 @@ class LoginView(APIView):
                 metadata={"email": email, "reason": "invalid_credentials"},
                 ip_address=client_ip,
             )
-            logger.warning(
-                f"Failed login attempt for {email} from {client_ip}"
-            )
+            logger.warning(f"Failed login attempt for {email} from {client_ip}")
 
             # Return 400 for missing fields, 401 for invalid credentials
             if error_code == "required":
@@ -119,14 +118,14 @@ class LoginView(APIView):
                     },
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
-        
+
         user = serializer.validated_data["user"]
-        
+
         # Generate JWT tokens
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
         refresh_token = str(refresh)
-        
+
         # Log successful login
         log_audit_event(
             event="admin.login",
@@ -138,17 +137,17 @@ class LoginView(APIView):
             ip_address=client_ip,
         )
         logger.info(f"User {user.email} logged in from {client_ip}")
-        
+
         # Prepare response
         response_data = {
             "access_token": access_token,
             "expires_in": int(timedelta(minutes=15).total_seconds()),
             "user": UserSerializer(user).data,
         }
-        
+
         # Create response
         response = Response(response_data, status=status.HTTP_200_OK)
-        
+
         # Set refresh token in httpOnly cookie
         response.set_cookie(
             key="refresh_token",
@@ -158,24 +157,24 @@ class LoginView(APIView):
             samesite=settings.COOKIE_SAMESITE,
             max_age=int(timedelta(days=settings.COOKIE_MAX_AGE_DAYS).total_seconds()),
         )
-        
+
         return response
 
 
 class RefreshTokenView(APIView):
     """
     Token refresh endpoint.
-    
+
     Reads refresh token from httpOnly cookie and returns new access token.
     """
-    
+
     permission_classes = [AllowAny]
-    
+
     def post(self, request: Request) -> Response:
         """Handle token refresh request."""
         # Get refresh token from cookie
         refresh_token = request.COOKIES.get("refresh_token")
-        
+
         if not refresh_token:
             return Response(
                 {
@@ -185,12 +184,12 @@ class RefreshTokenView(APIView):
                 },
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-        
+
         try:
             # Validate refresh token
             refresh = RefreshToken(refresh_token)
             user_id = refresh["user_id"]
-            
+
             # Get user
             try:
                 user = User.objects.get(id=user_id)
@@ -203,7 +202,7 @@ class RefreshTokenView(APIView):
                     },
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
-            
+
             # Check if user is active
             if not user.is_active:
                 return Response(
@@ -214,23 +213,23 @@ class RefreshTokenView(APIView):
                     },
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
-            
+
             # Generate new tokens
             new_refresh = RefreshToken.for_user(user)
             access_token = str(new_refresh.access_token)
-            
+
             # Blacklist old refresh token if configured
             if hasattr(refresh, "blacklist"):
                 refresh.blacklist()
-            
+
             # Prepare response
             response_data = {
                 "access_token": access_token,
                 "expires_in": int(timedelta(minutes=15).total_seconds()),
             }
-            
+
             response = Response(response_data, status=status.HTTP_200_OK)
-            
+
             # Set new refresh token in cookie
             response.set_cookie(
                 key="refresh_token",
@@ -238,11 +237,13 @@ class RefreshTokenView(APIView):
                 httponly=settings.COOKIE_HTTPONLY,
                 secure=settings.COOKIE_SECURE,
                 samesite=settings.COOKIE_SAMESITE,
-                max_age=int(timedelta(days=settings.COOKIE_MAX_AGE_DAYS).total_seconds()),
+                max_age=int(
+                    timedelta(days=settings.COOKIE_MAX_AGE_DAYS).total_seconds()
+                ),
             )
-            
+
             return response
-            
+
         except (TokenError, InvalidToken) as e:
             logger.warning(f"Invalid refresh token: {e}")
             return Response(
@@ -253,44 +254,46 @@ class RefreshTokenView(APIView):
                 },
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-        except Exception as e:
-            logger.error(f"Unexpected error in token refresh: {e}")
+        except (KeyError, TypeError, AttributeError) as e:
+            logger.error(f"Token parsing error in refresh: {e}")
             return Response(
                 {
-                    "error": "INTERNAL_ERROR",
-                    "message": "An error occurred while refreshing your token.",
+                    "error": "UNAUTHORIZED",
+                    "message": "Invalid token format.",
                     "details": {},
                 },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status=status.HTTP_401_UNAUTHORIZED,
             )
 
 
 class LogoutView(APIView):
     """
     Logout endpoint.
-    
+
     Invalidates the refresh token and clears the cookie.
     """
-    
+
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request: Request) -> Response:
         """Handle logout request."""
         client_ip = get_client_ip(request)
         user = request.user
-        
+
         # Get refresh token from cookie
         refresh_token = request.COOKIES.get("refresh_token")
-        
+
         if refresh_token:
             try:
                 # Blacklist the refresh token
                 token = RefreshToken(refresh_token)
                 if hasattr(token, "blacklist"):
                     token.blacklist()
-            except Exception as e:
-                logger.warning(f"Failed to blacklist token: {e}")
-        
+            except (TokenError, InvalidToken) as e:
+                logger.warning(f"Failed to blacklist invalid token: {e}")
+            except (KeyError, TypeError, AttributeError) as e:
+                logger.warning(f"Token parsing error during logout: {e}")
+
         # Log logout
         log_audit_event(
             event="admin.logout",
@@ -302,44 +305,44 @@ class LogoutView(APIView):
             ip_address=client_ip,
         )
         logger.info(f"User {user.email} logged out from {client_ip}")
-        
+
         # Create response and clear cookie
         response = Response(status=status.HTTP_204_NO_CONTENT)
         response.delete_cookie("refresh_token")
-        
+
         return response
 
 
 class UserProfileView(APIView):
     """
     User profile endpoint.
-    
+
     Returns the current user's profile information.
     """
-    
+
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request: Request) -> Response:
         """Get current user profile."""
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
-    
+
     def patch(self, request: Request) -> Response:
         """Update current user profile."""
         # Only allow updating certain fields
         allowed_fields = ["first_name", "last_name"]
         data = {k: v for k, v in request.data.items() if k in allowed_fields}
-        
+
         serializer = UserSerializer(
             request.user,
             data=data,
             partial=True,
         )
-        
+
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
-        
+
         return Response(
             {
                 "error": "VALIDATION_ERROR",

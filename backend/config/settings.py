@@ -99,7 +99,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.getenv("POSTGRES_DB", "restaurant"),
         "USER": os.getenv("POSTGRES_USER", "restaurant"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "restaurant_dev"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD", ""),
         "HOST": os.getenv("POSTGRES_HOST", "localhost"),
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
     }
@@ -111,15 +111,19 @@ AUTH_USER_MODEL = "accounts.User"
 
 # Authentication backends
 AUTHENTICATION_BACKENDS = [
-    'accounts.backends.EmailBackend',
-    'django.contrib.auth.backends.ModelBackend',
+    "accounts.backends.EmailBackend",
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
 # CSRF Configuration
-CSRF_TRUSTED_ORIGINS = os.getenv(
-    "CSRF_TRUSTED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000" if DEBUG else "",
-).split(",") if os.getenv("CSRF_TRUSTED_ORIGINS") or DEBUG else []
+CSRF_TRUSTED_ORIGINS = (
+    os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000" if DEBUG else "",
+    ).split(",")
+    if os.getenv("CSRF_TRUSTED_ORIGINS") or DEBUG
+    else []
+)
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
@@ -156,6 +160,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Media files
 MEDIA_URL = "media/"
@@ -244,6 +249,7 @@ try:
 except (OSError, PermissionError) as e:
     # Log warning but don't fail startup
     import warnings
+
     warnings.warn(f"Could not create logs directory: {e}")
 
 # JWT Configuration (per docs/SECURITY.md)
@@ -265,17 +271,62 @@ COOKIE_SAMESITE = "Strict"
 COOKIE_MAX_AGE_DAYS = 7
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS = os.getenv(
-    "CORS_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000" if DEBUG else "",
-).split(",") if os.getenv("CORS_ORIGINS") or DEBUG else []
+# In production, CORS_ORIGINS must be explicitly set - no fallback to dev URLs
+cors_origins_env = os.getenv("CORS_ORIGINS")
+if cors_origins_env:
+    CORS_ALLOWED_ORIGINS = cors_origins_env.split(",")
+elif DEBUG:
+    # Development fallback only
+    CORS_ALLOWED_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+else:
+    # Production: no CORS allowed if not explicitly configured
+    CORS_ALLOWED_ORIGINS = []
+CORS_ALLOW_CREDENTIALS = True
+APPEND_SLASH = False
 
-# Security headers (production)
+# =============================================================================
+# Production Security Settings
+# =============================================================================
+# These settings are critical for production deployment security
+# See: https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
+
 if not DEBUG:
-    SECURE_BROWSER_XSS_FILTER = True
+    # HTTPS Security
+    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+    # Cookie Security
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    CSRF_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Strict"
+    CSRF_COOKIE_SAMESITE = "Strict"
+
+    # Content Security
     SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = "DENY"
-    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() in ("true", "1", "yes")
+
+    # Additional security headers (complementing middleware)
+    SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+    # Proxy settings (when behind reverse proxy)
+    USE_X_FORWARDED_HOST = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+else:
+    # Development settings - more permissive for local development
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
 
 # JWT Secret validation (defense in depth - separate from SECRET_KEY)
 JWT_SECRET = os.getenv("JWT_SECRET")
@@ -311,3 +362,37 @@ Q_CLUSTER = {
     "bulk": 10,
     "orm": "default",  # Use Django ORM as broker
 }
+
+# =============================================================================
+# Caching Configuration
+# =============================================================================
+# Redis is used as the cache backend for production performance
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": os.getenv("REDIS_URL", "redis://redis:6379/1"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "SOCKET_CONNECT_TIMEOUT": 5,
+            "SOCKET_TIMEOUT": 5,
+            "RETRY_ON_TIMEOUT": True,
+            "MAX_CONNECTIONS": 50,
+        },
+        "KEY_PREFIX": "restaurant",
+        "TIMEOUT": 300,  # 5 minutes default timeout
+    }
+}
+
+# Cache timeouts for different data types (in seconds)
+CACHE_TIMEOUTS = {
+    "reservation_availability": 60,  # 1 minute - availability changes frequently
+    "restaurant_info": 300,  # 5 minutes - changes infrequently
+    "menu_data": 600,  # 10 minutes - menu changes infrequently
+    "static_content": 1800,  # 30 minutes - blog posts, testimonials, etc.
+}
+
+# Use cache for session storage in production (more secure and scalable)
+if not DEBUG:
+    SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+    SESSION_CACHE_ALIAS = "default"
