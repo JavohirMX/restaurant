@@ -118,6 +118,11 @@ class ServicePeriod(BaseModel):
 
     class Meta:
         ordering = ["weekday", "opens_at"]
+        indexes = [
+            models.Index(
+                fields=["restaurant", "weekday"], name="svc_period_restaurant_day_idx"
+            ),
+        ]
 
     def __str__(self):
         return f"{self.name} - {self.get_weekday_display()} {self.opens_at}-{self.closes_at}"
@@ -148,7 +153,9 @@ class GalleryImage(BaseModel):
 
     def clean(self):
         if not self.alt_text or not self.alt_text.strip():
-            raise ValidationError({"alt_text": "Alt text is required for accessibility."})
+            raise ValidationError(
+                {"alt_text": "Alt text is required for accessibility."}
+            )
 
 
 class Testimonial(BaseModel):
@@ -207,6 +214,10 @@ class BlogPost(BaseModel):
 
     class Meta:
         ordering = ["-published_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["slug"], name="blog_post_slug_idx"),
+            models.Index(fields=["published_at"], name="blog_post_published_idx"),
+        ]
 
     def __str__(self):
         return self.title
