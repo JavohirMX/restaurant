@@ -19,10 +19,17 @@ app_name = "reservations_public"
 urlpatterns = [
     # Availability
     path("availability/", AvailabilityView.as_view(), name="availability"),
-    
     # Reservations
     path("", ReservationCreateView.as_view(), name="reservation-create"),
     path("<str:token>/", ReservationDetailView.as_view(), name="reservation-detail"),
-    path("<str:token>/modify/", ReservationModifyView.as_view(), name="reservation-modify"),
-    path("<str:token>/cancel/", ReservationCancelView.as_view(), name="reservation-cancel"),
+    path(
+        "<str:token>/modify/",
+        ReservationModifyView.as_view(),
+        name="reservation-modify",
+    ),
+    path(
+        "<str:token>/cancel/",
+        ReservationCancelView.as_view(),
+        name="reservation-cancel",
+    ),
 ]

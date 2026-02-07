@@ -125,6 +125,9 @@ class Reservation(BaseModel):
         ordering = ["-starts_at"]
         indexes = [
             models.Index(fields=["status", "starts_at"]),
+            models.Index(fields=["starts_at", "status"], name="reservation_start_status_idx"),
+            models.Index(fields=["guest_email"], name="reservation_email_idx"),
+            models.Index(fields=["created_at"], name="reservation_created_idx"),
         ]
 
     def __str__(self):
@@ -157,7 +160,7 @@ class ReservationToken(BaseModel):
     reservation = models.OneToOneField(
         Reservation,
         on_delete=models.CASCADE,
-        related_name="tokens",
+        related_name="token",
     )
     token = models.CharField(
         max_length=64,
