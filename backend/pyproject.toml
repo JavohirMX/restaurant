@@ -9,6 +9,9 @@ dependencies = [
     "djangorestframework-simplejwt[blacklist]>=5.3",
     "django-cors-headers>=4.3",
     "django-ratelimit>=4.1",
+    "django-q2>=1.6",
+    "django-redis>=5.4",
+    "gunicorn>=21.0",
     "psycopg[binary]>=3.1",
     "python-dotenv>=1.0",
     "pillow>=10.0",
@@ -22,5 +25,4 @@ dev-dependencies = [
     "freezegun>=1.4",
     "responses>=0.25",
     "coverage>=7.4",
-    "django-q2>=1.6",
 ]
