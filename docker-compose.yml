@@ -1,20 +1,154 @@
+# Docker Compose for Local Development
+# This configuration is optimized for development with hot-reload
+
 services:
+  # PostgreSQL Database
   db:
     image: postgres:16-alpine
     container_name: restaurant_db
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-restaurant}
       POSTGRES_USER: ${POSTGRES_USER:-restaurant}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set explicitly. Create a .env file with a secure password.}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U restaurant -d restaurant"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-restaurant} -d ${POSTGRES_DB:-restaurant}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - restaurant_network
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: restaurant_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - restaurant_network
+
+  # Django Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: production
+    container_name: restaurant_backend
+    environment:
+      DEBUG: "true"
+      SECRET_KEY: ${SECRET_KEY}
+      POSTGRES_DB: ${POSTGRES_DB:-restaurant}
+      POSTGRES_USER: ${POSTGRES_USER:-restaurant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      CORS_ORIGINS: http://localhost:3000,http://frontend:3000
+      CSRF_TRUSTED_ORIGINS: http://localhost:3000,http://frontend:3000
+      EMAIL_BACKEND_TYPE: console
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend_static:/app/staticfiles
+      - backend_media:/app/media
+      - backend_logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput --clear &&
+             gunicorn --bind 0.0.0.0:8000 --workers 2 --threads 2 --worker-class gthread --reload --access-logfile - --error-logfile - config.wsgi:application"
+    networks:
+      - restaurant_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Django Q Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: production
+    container_name: restaurant_worker
+    environment:
+      DEBUG: "true"
+      SECRET_KEY: ${SECRET_KEY}
+      POSTGRES_DB: ${POSTGRES_DB:-restaurant}
+      POSTGRES_USER: ${POSTGRES_USER:-restaurant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      EMAIL_BACKEND_TYPE: console
+    volumes:
+      - ./backend:/app
+      - backend_media:/app/media
+      - backend_logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py qcluster"
+    networks:
+      - restaurant_network
+    restart: unless-stopped
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      target: development
+    container_name: restaurant_frontend
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend
+    networks:
+      - restaurant_network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   postgres_data:
+  redis_data:
+  backend_static:
+  backend_media:
+  backend_logs:
+
+networks:
+  restaurant_network:
+    driver: bridge
