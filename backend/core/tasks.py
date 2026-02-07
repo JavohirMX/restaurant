@@ -21,28 +21,32 @@ logger = logging.getLogger(__name__)
 def send_reservation_email(reservation_id: str, email_type: str) -> bool:
     """
     Send reservation-related email to guest.
-    
+
     Args:
         reservation_id: UUID of the reservation
         email_type: Type of email (confirmed, pending, modified, cancelled)
-    
+
     Returns:
         True if email sent successfully
     """
     try:
-        reservation = Reservation.objects.get(id=reservation_id)
+        reservation = Reservation.objects.select_related("token").get(id=reservation_id)
     except Reservation.DoesNotExist:
         logger.error(f"Reservation {reservation_id} not found for email")
         return False
-    
+
     # Get restaurant info
     from restaurant.models import Restaurant
+
     restaurant = Restaurant.get_instance()
     restaurant_name = restaurant.name if restaurant else "Our Restaurant"
 
-    # Get reservation token for manage URL
-    token = reservation.tokens.first()
-    manage_url = f"/reservations/{token.token}" if token else "/reservations"
+    # Get reservation token for manage URL (OneToOne relationship)
+    try:
+        token = reservation.token
+        manage_url = f"/reservations/{token.token}"
+    except ReservationToken.DoesNotExist:
+        manage_url = "/reservations"
 
     # Build context
     context = {
@@ -55,7 +59,7 @@ def send_reservation_email(reservation_id: str, email_type: str) -> bool:
         "manage_url": manage_url,
         "booking_url": "/reservations",
     }
-    
+
     # Map email type to template
     template_map = {
         "confirmed": "reservation_confirmed",
@@ -64,14 +68,14 @@ def send_reservation_email(reservation_id: str, email_type: str) -> bool:
         "cancelled": "reservation_cancelled",
         "reminder": "reservation_reminder",
     }
-    
+
     template_name = template_map.get(email_type)
     if not template_name:
         logger.error(f"Unknown email type: {email_type}")
         return False
-    
+
     result = send_email(reservation.guest_email, template_name, context)
-    
+
     # Create audit event for email sent
     if result:
         AuditEvent.objects.create(
@@ -82,31 +86,31 @@ def send_reservation_email(reservation_id: str, email_type: str) -> bool:
             entity_id=reservation.id,
             metadata={"email_type": email_type},
         )
-    
+
     return result
 
 
 def send_staff_notification(reservation_id: str, notification_type: str) -> bool:
     """
     Send notification to staff inbox.
-    
+
     Args:
         reservation_id: UUID of the reservation
         notification_type: Type of notification (new_pending, cancelled)
-    
+
     Returns:
         True if notification sent successfully
     """
     if not settings.STAFF_EMAIL:
         logger.warning("STAFF_EMAIL not configured, skipping notification")
         return False
-    
+
     try:
         reservation = Reservation.objects.get(id=reservation_id)
     except Reservation.DoesNotExist:
         logger.error(f"Reservation {reservation_id} not found for staff notification")
         return False
-    
+
     # Build context
     context = {
         "guest_name": reservation.guest_name,
@@ -118,66 +122,61 @@ def send_staff_notification(reservation_id: str, notification_type: str) -> bool
         "notes": reservation.notes or "None",
         "admin_url": f"/admin/reservations/{reservation.id}",
     }
-    
+
     # Map notification type to template
     template_map = {
         "new_pending": "staff_new_pending",
         "cancelled": "staff_reservation_cancelled",
     }
-    
+
     template_name = template_map.get(notification_type)
     if not template_name:
         logger.error(f"Unknown notification type: {notification_type}")
         return False
-    
+
     return send_staff_email(template_name, context)
 
 
 def cleanup_expired_tokens() -> int:
     """
     Clean up expired reservation tokens.
-    
+
     Returns:
         Number of tokens deleted
     """
     expired_tokens = ReservationToken.objects.filter(expires_at__lt=timezone.now())
-    count = expired_tokens.count()
-    expired_tokens.delete()
-    
+    count, _ = expired_tokens.delete()
+
     if count > 0:
         logger.info(f"Cleaned up {count} expired reservation tokens")
-    
+
     return count
 
 
 def cleanup_old_audit_events(days: int = 90) -> int:
     """
     Archive old audit events.
-    
+
     Args:
         days: Age in days after which to archive events
-    
+
     Returns:
         Number of events archived
     """
     cutoff_date = timezone.now() - timedelta(days=days)
     old_events = AuditEvent.objects.filter(created_at__lt=cutoff_date)
-    count = old_events.count()
-    
-    # In a real implementation, you might archive these to cold storage
-    # For now, we just delete them
-    old_events.delete()
-    
+    count, _ = old_events.delete()
+
     if count > 0:
         logger.info(f"Cleaned up {count} old audit events")
-    
+
     return count
 
 
 def send_reservation_reminders() -> int:
     """
     Send reminder emails for upcoming reservations.
-    
+
     Returns:
         Number of reminders sent
     """
@@ -188,37 +187,38 @@ def send_reservation_reminders() -> int:
         starts_at__lte=tomorrow,
         starts_at__gt=timezone.now(),
     )
-    
+
     count = 0
     for reservation in upcoming:
-        # Check if we've already sent a reminder
-        reminder_sent = AuditEvent.objects.filter(
+        # Use get_or_create to prevent race conditions in multi-worker setups
+        # This ensures only one worker sends the reminder per reservation
+        reminder_event, created = AuditEvent.objects.get_or_create(
             event="reservation.reminder_sent",
             entity_type="reservation",
             entity_id=reservation.id,
-        ).exists()
-        
-        if not reminder_sent:
-            # Send reminder email
-            if send_reservation_email(str(reservation.id), "reminder"):
-                # Log that we sent the reminder
-                AuditEvent.objects.create(
-                    event="reservation.reminder_sent",
-                    actor_type=AuditEvent.ActorType.SYSTEM,
-                    actor_id=None,
-                    entity_type="reservation",
-                    entity_id=reservation.id,
-                    metadata={},
-                )
+            defaults={
+                "actor_type": AuditEvent.ActorType.SYSTEM,
+                "actor_id": None,
+                "metadata": {},
+            },
+        )
+
+        if created:
+            # Send reminder email only if we created the event (first worker)
+            if not send_reservation_email(str(reservation.id), "reminder"):
+                # If email failed, delete the audit event so we can retry
+                reminder_event.delete()
+            else:
                 count += 1
-    
+
     if count > 0:
         logger.info(f"Sent {count} reservation reminders")
-    
+
     return count
 
 
 # Async wrappers for views to use
+
 
 def queue_reservation_email(reservation_id: str, email_type: str) -> None:
     """Queue a reservation email to be sent asynchronously."""
@@ -231,6 +231,7 @@ def queue_staff_notification(reservation_id: str, notification_type: str) -> Non
 
 
 # Scheduled task setup (call these in AppConfig.ready() or management command)
+
 
 def setup_scheduled_tasks():
     """Set up recurring scheduled tasks."""
@@ -266,12 +267,12 @@ def setup_scheduled_tasks():
         repeats=-1,
         next_run=next_sunday_4am,
     )
-    
+
     # Send reservation reminders hourly
     schedule(
         "core.tasks.send_reservation_reminders",
         schedule_type="H",  # Hourly
         repeats=-1,
     )
-    
+
     logger.info("Scheduled tasks set up successfully")

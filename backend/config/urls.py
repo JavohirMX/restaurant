@@ -21,31 +21,44 @@ api_urlpatterns = [
     # API root
     path("api/", api_root, name="api-root"),
     path("api/version/", version_info, name="api-version"),
-    
     # Version 1 API
-    path("api/v1/", include([
-        # Public endpoints (no authentication required)
-        path("public/", include([
-            # Restaurant app public URLs
-            path("restaurant/", include("restaurant.urls_public")),
-            # Menu app public URLs
-            path("menu/", include("menu.urls_public")),
-            # Reservations app public URLs
-            path("reservations/", include("reservations.urls_public")),
-        ])),
-        
-        # Admin endpoints (authentication required)
-        path("admin/", include([
-            # Accounts app admin URLs (auth, users)
-            path("auth/", include("accounts.urls_admin")),
-            # Restaurant app admin URLs
-            path("restaurant/", include("restaurant.urls_admin")),
-            # Menu app admin URLs
-            path("menu/", include("menu.urls_admin")),
-            # Reservations app admin URLs
-            path("reservations/", include("reservations.urls_admin")),
-        ])),
-    ])),
+    path(
+        "api/v1/",
+        include(
+            [
+                # Public endpoints (no authentication required)
+                path(
+                    "public/",
+                    include(
+                        [
+                            # Restaurant app public URLs
+                            path("restaurant/", include("restaurant.urls_public")),
+                            # Menu app public URLs
+                            path("menu/", include("menu.urls_public")),
+                            # Reservations app public URLs
+                            path("reservations/", include("reservations.urls_public")),
+                        ]
+                    ),
+                ),
+                # Admin endpoints (authentication required)
+                path(
+                    "admin/",
+                    include(
+                        [
+                            # Accounts app admin URLs (auth, users)
+                            path("auth/", include("accounts.urls_admin")),
+                            # Restaurant app admin URLs
+                            path("restaurant/", include("restaurant.urls_admin")),
+                            # Menu app admin URLs
+                            path("menu/", include("menu.urls_admin")),
+                            # Reservations app admin URLs
+                            path("reservations/", include("reservations.urls_admin")),
+                        ]
+                    ),
+                ),
+            ]
+        ),
+    ),
 ]
 
 # Health check (outside API namespace)
@@ -59,6 +72,6 @@ urlpatterns = admin_urlpatterns + api_urlpatterns + health_urlpatterns
 # Serve media files in development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    
+
     # Serve static files in development
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
