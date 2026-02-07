@@ -41,3 +41,13 @@ build/
 # Docker
 *.pid
 
+# Frontend
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# Nginx SSL (production)
+nginx/ssl/
+
