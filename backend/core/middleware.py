@@ -122,30 +122,47 @@ class APIVersionMiddleware:
 class SecurityHeadersMiddleware:
     """
     Middleware for adding security headers to responses.
-    
+
     Adds headers for additional security in production.
+    Includes Content Security Policy (CSP) configuration.
     """
-    
+
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]):
         self.get_response = get_response
-    
+
     def __call__(self, request: HttpRequest) -> HttpResponse:
         response = self.get_response(request)
-        
+
         # Add security headers
         # Prevent MIME type sniffing
         response.setdefault("X-Content-Type-Options", "nosniff")
-        
+
         # Prevent clickjacking
         response.setdefault("X-Frame-Options", "DENY")
-        
-        # XSS protection is deprecated - remove legacy header
-        # Content Security Policy (CSP) should be used instead for XSS protection
-        # response.setdefault("X-XSS-Protection", "1; mode=block")
-        
+
         # Referrer policy
         response.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        
+
+        # Permissions Policy (formerly Feature Policy)
+        # Restrict browser features to enhance privacy/security
+        response.setdefault(
+            "Permissions-Policy",
+            "accelerometer=(), camera=(), geolocation=(), gyroscope=(), "
+            "magnetometer=(), microphone=(), payment=(), usb=()"
+        )
+
+        # Content Security Policy (CSP)
+        # Strict policy for API responses (not HTML pages served by Next.js)
+        # The frontend handles its own CSP via Next.js headers config
+        if request.path.startswith("/api/"):
+            # API responses - minimal CSP, mainly for JSON responses
+            response.setdefault(
+                "Content-Security-Policy",
+                "default-src 'none'; "
+                "frame-ancestors 'none'; "
+                "base-uri 'none'"
+            )
+
         return response
 
 
