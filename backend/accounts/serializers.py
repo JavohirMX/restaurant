@@ -15,13 +15,13 @@ from accounts.models import User
 class UserSerializer(serializers.ModelSerializer):
     """
     Serializer for User model.
-    
+
     Includes basic user information and computed permission flags.
     """
-    
+
     full_name = serializers.CharField(source="get_full_name", read_only=True)
     permissions = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = User
         fields = [
@@ -40,7 +40,7 @@ class UserSerializer(serializers.ModelSerializer):
             "date_joined",
             "is_active",
         ]
-    
+
     def get_permissions(self, obj: User) -> dict[str, bool]:
         """Get permission flags for the user."""
         return {
@@ -54,10 +54,10 @@ class UserSerializer(serializers.ModelSerializer):
 class UserCreateSerializer(serializers.ModelSerializer):
     """
     Serializer for creating new users.
-    
+
     Handles password setting and validation.
     """
-    
+
     password = serializers.CharField(
         write_only=True,
         min_length=12,
@@ -68,7 +68,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
         min_length=12,
         help_text="Confirm the password (min 12 characters)",
     )
-    
+
     class Meta:
         model = User
         fields = [
@@ -81,7 +81,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "password_confirm",
         ]
         read_only_fields = ["id"]
-    
+
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """Validate that passwords match."""
         if data.get("password") != data.get("password_confirm"):
@@ -89,27 +89,27 @@ class UserCreateSerializer(serializers.ModelSerializer):
                 {"password_confirm": "Passwords do not match."}
             )
         return data
-    
+
     def create(self, validated_data: dict[str, Any]) -> User:
         """Create user with password."""
         # Remove password_confirm from data
         validated_data.pop("password_confirm", None)
         password = validated_data.pop("password")
-        
+
         user = User.objects.create(**validated_data)
         user.set_password(password)
         user.save()
-        
+
         return user
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     """
     Serializer for updating users.
-    
+
     Allows updating profile information without password.
     """
-    
+
     class Meta:
         model = User
         fields = [
@@ -126,10 +126,10 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 class LoginSerializer(serializers.Serializer):
     """
     Serializer for login requests.
-    
+
     Validates email and password credentials.
     """
-    
+
     email = serializers.EmailField(
         help_text="User's email address",
     )
@@ -137,7 +137,7 @@ class LoginSerializer(serializers.Serializer):
         write_only=True,
         help_text="User's password",
     )
-    
+
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """Validate credentials."""
         email = data.get("email")
@@ -175,10 +175,10 @@ class LoginSerializer(serializers.Serializer):
 class TokenResponseSerializer(serializers.Serializer):
     """
     Serializer for token response.
-    
+
     Standardizes the login/refresh response format.
     """
-    
+
     access_token = serializers.CharField(
         help_text="JWT access token",
     )
@@ -198,7 +198,7 @@ class PasswordChangeSerializer(serializers.Serializer):
     """
     Serializer for password change requests.
     """
-    
+
     current_password = serializers.CharField(
         write_only=True,
         help_text="Current password",
@@ -212,7 +212,7 @@ class PasswordChangeSerializer(serializers.Serializer):
         write_only=True,
         help_text="Confirm new password",
     )
-    
+
     def validate(self, data: dict[str, Any]) -> dict[str, Any]:
         """Validate password change."""
         if data["new_password"] != data["new_password_confirm"]:
@@ -220,7 +220,7 @@ class PasswordChangeSerializer(serializers.Serializer):
                 {"new_password_confirm": "New passwords do not match."}
             )
         return data
-    
+
     def validate_current_password(self, value: str) -> str:
         """Validate current password."""
         user = self.context["request"].user

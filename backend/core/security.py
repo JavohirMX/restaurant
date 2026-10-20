@@ -13,10 +13,10 @@ from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from PIL import Image
 
-
 # =============================================================================
 # Input Sanitization
 # =============================================================================
+
 
 def sanitize_html(text: str) -> str:
     """
@@ -58,7 +58,11 @@ def sanitize_text(text: str, max_length: int = 5000) -> str:
     text = text.strip()
 
     # Remove control characters except newlines and tabs
-    text = "".join(char for char in text if char == "\n" or char == "\t" or (ord(char) >= 32 and ord(char) <= 126))
+    text = "".join(
+        char
+        for char in text
+        if char == "\n" or char == "\t" or (ord(char) >= 32 and ord(char) <= 126)
+    )
 
     # Limit length
     return text[:max_length]
@@ -351,7 +355,9 @@ def validate_password_strength(password: str) -> list[str]:
     errors = []
 
     if len(password) < MIN_PASSWORD_LENGTH:
-        errors.append(f"Password must be at least {MIN_PASSWORD_LENGTH} characters long.")
+        errors.append(
+            f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
+        )
 
     if not re.search(r"[A-Z]", password):
         errors.append("Password must contain at least one uppercase letter.")
@@ -371,6 +377,7 @@ def validate_password_strength(password: str) -> list[str]:
 # =============================================================================
 # Rate Limiting Keys
 # =============================================================================
+
 
 def get_client_ip(request) -> str:
     """

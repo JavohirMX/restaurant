@@ -9,25 +9,23 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from menu.models import MenuCategory, MenuItem, MenuItemVariant
+from menu.models import MenuCategory
 
 
 class MenuListView(APIView):
     """
     Public endpoint for the full menu.
-    
+
     Returns all categories with their items and variants,
     sorted by sort_order.
     """
-    
+
     permission_classes = [AllowAny]
-    
+
     def get(self, request: Request) -> Response:
         """Get the full menu."""
-        categories = MenuCategory.objects.prefetch_related(
-            "items__variants"
-        ).all()
-        
+        categories = MenuCategory.objects.prefetch_related("items__variants").all()
+
         menu_data = []
         for category in categories:
             category_data = {
@@ -37,9 +35,9 @@ class MenuListView(APIView):
                 "items": self._serialize_items(category.items.all(), request),
             }
             menu_data.append(category_data)
-        
+
         return Response({"categories": menu_data})
-    
+
     def _serialize_items(self, items, request: Request) -> list[dict]:
         """Serialize menu items."""
         result = []
@@ -55,16 +53,18 @@ class MenuListView(APIView):
             }
             result.append(item_data)
         return result
-    
+
     def _serialize_photos(self, photos: list, request: Request) -> list[dict]:
         """Serialize photo URLs."""
         result = []
         for photo in photos:
             if isinstance(photo, str):
                 # If it's just a filename/path
-                result.append({
-                    "url": request.build_absolute_uri(f"/media/{photo}"),
-                })
+                result.append(
+                    {
+                        "url": request.build_absolute_uri(f"/media/{photo}"),
+                    }
+                )
             elif isinstance(photo, dict):
                 # If it's already a dict with metadata
                 photo_copy = photo.copy()
@@ -72,7 +72,7 @@ class MenuListView(APIView):
                     photo_copy["url"] = request.build_absolute_uri(photo_copy["url"])
                 result.append(photo_copy)
         return result
-    
+
     def _serialize_variants(self, variants) -> list[dict]:
         """Serialize menu item variants."""
         result = []

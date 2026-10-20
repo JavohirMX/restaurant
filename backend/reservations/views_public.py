@@ -6,9 +6,8 @@ Provides public access to reservation availability and booking.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any
 
-from django.db.models import Q, Sum
+from django.db.models import Sum
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
