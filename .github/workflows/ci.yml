@@ -7,7 +7,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev, develop]
 
 env:
   REGISTRY: ghcr.io
@@ -35,22 +35,20 @@ jobs:
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: |
-          uv venv
-          uv pip install -e ".[dev]"
+          uv sync
 
       - name: Run Ruff linter
         run: |
-          source .venv/bin/activate
-          ruff check .
+          uvx ruff check .
 
       - name: Run Ruff formatter check
         run: |
-          source .venv/bin/activate
-          ruff format --check .
+          uvx ruff format --check .
 
   # Backend tests
   backend-test:
@@ -98,12 +96,12 @@ jobs:
       - name: Install uv
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: |
-          uv venv
-          uv pip install -e ".[dev]"
+          uv sync
 
       - name: Run tests with pytest
         env:
