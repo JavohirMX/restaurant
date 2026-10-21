@@ -266,7 +266,9 @@ class Command(BaseCommand):
             20,
         )
 
-    def _create_menu_item(self, category, name, description, tags, variants, sort_order):
+    def _create_menu_item(
+        self, category, name, description, tags, variants, sort_order
+    ):
         item = MenuItem.objects.create(
             category=category,
             name=name,

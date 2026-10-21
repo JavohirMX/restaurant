@@ -20,16 +20,12 @@ app_name = "restaurant_public"
 urlpatterns = [
     # Restaurant info
     path("info/", RestaurantInfoView.as_view(), name="restaurant-info"),
-    
     # Service periods / hours
     path("hours/", ServicePeriodsListView.as_view(), name="service-periods"),
-    
     # Gallery
     path("gallery/", GalleryListView.as_view(), name="gallery-list"),
-    
     # Testimonials
     path("testimonials/", TestimonialsListView.as_view(), name="testimonials-list"),
-    
     # Blog
     path("blog/", BlogListView.as_view(), name="blog-list"),
     path("blog/<slug:slug>/", BlogDetailView.as_view(), name="blog-detail"),

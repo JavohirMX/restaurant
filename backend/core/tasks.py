@@ -12,8 +12,8 @@ from django.utils import timezone
 from django_q.tasks import async_task, schedule
 
 from core.email.service import send_email, send_staff_email
-from reservations.models import Reservation, ReservationToken
 from core.models import AuditEvent
+from reservations.models import Reservation, ReservationToken
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +235,7 @@ def queue_staff_notification(reservation_id: str, notification_type: str) -> Non
 
 def setup_scheduled_tasks():
     """Set up recurring scheduled tasks."""
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     now = timezone.now()
 

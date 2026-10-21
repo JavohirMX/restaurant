@@ -25,6 +25,7 @@ def factory():
 @pytest.fixture
 def mock_view():
     """Return a mock view object."""
+
     class MockView:
         pass
 
@@ -126,7 +127,7 @@ class TestIsManagerPermission:
 @pytest.mark.django_db
 class TestIsHostPermission:
     """Tests for IsHost permission class.
-    
+
     Host permission allows admin, manager, and host users.
     Used for reservation management endpoints.
     """
@@ -171,7 +172,7 @@ class TestIsHostPermission:
 @pytest.mark.django_db
 class TestIsEditorPermission:
     """Tests for IsEditor permission class.
-    
+
     Editor permission allows admin, manager, and editor users.
     Used for content management endpoints.
     """
@@ -229,7 +230,9 @@ class TestIsOwnerPermission:
                 self.user = owner_user
 
         permission = IsOwner()
-        assert permission.has_object_permission(request, mock_view, MockObj(user)) is True
+        assert (
+            permission.has_object_permission(request, mock_view, MockObj(user)) is True
+        )
 
     def test_user_is_owner_by_created_by_attribute(self, factory, mock_view):
         """User should have permission if they own the object via created_by attribute."""
@@ -243,7 +246,9 @@ class TestIsOwnerPermission:
                 self.created_by = owner_user
 
         permission = IsOwner()
-        assert permission.has_object_permission(request, mock_view, MockObj(user)) is True
+        assert (
+            permission.has_object_permission(request, mock_view, MockObj(user)) is True
+        )
 
     def test_user_is_owner_by_pk(self, factory, mock_view):
         """User should have permission if object pk matches user pk."""
@@ -257,7 +262,10 @@ class TestIsOwnerPermission:
                 self.pk = owner_pk
 
         permission = IsOwner()
-        assert permission.has_object_permission(request, mock_view, MockObj(user.pk)) is True
+        assert (
+            permission.has_object_permission(request, mock_view, MockObj(user.pk))
+            is True
+        )
 
     def test_different_user_denied(self, factory, mock_view):
         """Different user should be denied."""
@@ -272,7 +280,10 @@ class TestIsOwnerPermission:
                 self.user = owner_user
 
         permission = IsOwner()
-        assert permission.has_object_permission(request, mock_view, MockObj(other_user)) is False
+        assert (
+            permission.has_object_permission(request, mock_view, MockObj(other_user))
+            is False
+        )
 
     def test_anonymous_user_denied(self, factory, mock_view):
         """Anonymous user should be denied."""
@@ -287,7 +298,10 @@ class TestIsOwnerPermission:
                 self.user = owner_user
 
         permission = IsOwner()
-        assert permission.has_object_permission(request, mock_view, MockObj(UserFactory())) is False
+        assert (
+            permission.has_object_permission(request, mock_view, MockObj(UserFactory()))
+            is False
+        )
 
 
 @pytest.mark.django_db
@@ -344,7 +358,9 @@ class TestPermissionMatrix:
             (User.Role.EDITOR, IsEditor, True),
         ],
     )
-    def test_permission_matrix(self, factory, mock_view, role, permission_class, expected):
+    def test_permission_matrix(
+        self, factory, mock_view, role, permission_class, expected
+    ):
         """Test the complete permission matrix."""
         user = UserFactory(role=role)
         request = factory.get("/test/")

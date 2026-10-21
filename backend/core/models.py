@@ -53,4 +53,6 @@ class AuditEvent(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.event} - {self.entity_type}:{self.entity_id} at {self.created_at}"
+        return (
+            f"{self.event} - {self.entity_type}:{self.entity_id} at {self.created_at}"
+        )

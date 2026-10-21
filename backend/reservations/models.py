@@ -5,7 +5,6 @@ Reservation models: settings, reservations, and tokens for guest management.
 import secrets
 from datetime import timedelta
 
-from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -125,7 +124,9 @@ class Reservation(BaseModel):
         ordering = ["-starts_at"]
         indexes = [
             models.Index(fields=["status", "starts_at"]),
-            models.Index(fields=["starts_at", "status"], name="reservation_start_status_idx"),
+            models.Index(
+                fields=["starts_at", "status"], name="reservation_start_status_idx"
+            ),
             models.Index(fields=["guest_email"], name="reservation_email_idx"),
             models.Index(fields=["created_at"], name="reservation_created_idx"),
         ]
@@ -188,15 +189,12 @@ class ReservationToken(BaseModel):
     @property
     def is_valid(self):
         """Check if token is still valid (not expired and reservation not cancelled)."""
-        return (
-            timezone.now() < self.expires_at
-            and not self.reservation.is_cancelled
-        )
+        return timezone.now() < self.expires_at and not self.reservation.is_cancelled
 
     @classmethod
     def get_by_token(cls, token_string):
         """Get a token by its string value, or None if not found.
-        
+
         Note: This returns the token even if expired or cancelled.
         Callers should check is_valid if they need to validate.
         """

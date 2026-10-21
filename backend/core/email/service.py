@@ -12,7 +12,6 @@ from typing import Any
 
 from django.conf import settings
 from django.core.mail import EmailMessage, get_connection
-from django.template.loader import render_to_string
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,9 @@ class EmailBackend(ABC):
     """Abstract base class for email backends."""
 
     @abstractmethod
-    def send(self, to: list[str], subject: str, body: str, html_body: str | None = None) -> bool:
+    def send(
+        self, to: list[str], subject: str, body: str, html_body: str | None = None
+    ) -> bool:
         """Send an email."""
         pass
 
@@ -29,7 +30,9 @@ class EmailBackend(ABC):
 class ConsoleEmailBackend(EmailBackend):
     """Backend that logs emails to console."""
 
-    def send(self, to: list[str], subject: str, body: str, html_body: str | None = None) -> bool:
+    def send(
+        self, to: list[str], subject: str, body: str, html_body: str | None = None
+    ) -> bool:
         """Log email to console."""
         logger.info("=" * 60)
         logger.info("EMAIL")
@@ -49,7 +52,9 @@ class ConsoleEmailBackend(EmailBackend):
 class SmtpEmailBackend(EmailBackend):
     """Backend that sends emails via SMTP."""
 
-    def send(self, to: list[str], subject: str, body: str, html_body: str | None = None) -> bool:
+    def send(
+        self, to: list[str], subject: str, body: str, html_body: str | None = None
+    ) -> bool:
         """Send email via SMTP."""
         try:
             email = EmailMessage(
@@ -59,11 +64,11 @@ class SmtpEmailBackend(EmailBackend):
                 to=to,
                 connection=get_connection(),
             )
-            
+
             if html_body:
                 email.content_subtype = "html"
                 email.body = html_body
-            
+
             email.send()
             return True
         except Exception as e:
@@ -119,7 +124,7 @@ class EmailService:
         try:
             # Load template
             template = EmailTemplate.get_template(template_name)
-            
+
             # Render subject and body
             subject = template.render_subject(context)
             body = template.render_body(context)
@@ -178,13 +183,15 @@ class EmailTemplate:
 
     def render_subject(self, context: dict[str, Any]) -> str:
         """Render email subject."""
-        from django.template import Template, Context
+        from django.template import Context, Template
+
         template = Template(self.subject_template)
         return template.render(Context(context))
 
     def render_body(self, context: dict[str, Any]) -> str:
         """Render email body."""
-        from django.template import Template, Context
+        from django.template import Context, Template
+
         template = Template(self.body_template)
         return template.render(Context(context))
 
@@ -192,7 +199,8 @@ class EmailTemplate:
         """Render HTML email body."""
         if not self.html_template:
             return None
-        from django.template import Template, Context
+        from django.template import Context, Template
+
         template = Template(self.html_template)
         return template.render(Context(context))
 
@@ -210,10 +218,11 @@ class EmailTemplate:
 
 
 # Register email templates
-EmailTemplate.register(EmailTemplate(
-    name="reservation_confirmed",
-    subject_template="Your reservation at {{ restaurant_name }} is confirmed",
-    body_template="""Dear {{ guest_name }},
+EmailTemplate.register(
+    EmailTemplate(
+        name="reservation_confirmed",
+        subject_template="Your reservation at {{ restaurant_name }} is confirmed",
+        body_template="""Dear {{ guest_name }},
 
 Your reservation at {{ restaurant_name }} is confirmed.
 
@@ -229,13 +238,15 @@ We look forward to seeing you!
 
 {{ restaurant_name }}
 """,
-    html_template=None,  # Could add HTML version
-))
+        html_template=None,  # Could add HTML version
+    )
+)
 
-EmailTemplate.register(EmailTemplate(
-    name="reservation_pending",
-    subject_template="Your reservation request at {{ restaurant_name }}",
-    body_template="""Dear {{ guest_name }},
+EmailTemplate.register(
+    EmailTemplate(
+        name="reservation_pending",
+        subject_template="Your reservation request at {{ restaurant_name }}",
+        body_template="""Dear {{ guest_name }},
 
 Thank you for your reservation request at {{ restaurant_name }}.
 
@@ -251,12 +262,14 @@ You can check the status of your reservation here:
 
 {{ restaurant_name }}
 """,
-))
+    )
+)
 
-EmailTemplate.register(EmailTemplate(
-    name="reservation_modified",
-    subject_template="Your reservation has been updated",
-    body_template="""Dear {{ guest_name }},
+EmailTemplate.register(
+    EmailTemplate(
+        name="reservation_modified",
+        subject_template="Your reservation has been updated",
+        body_template="""Dear {{ guest_name }},
 
 Your reservation at {{ restaurant_name }} has been updated.
 
@@ -271,12 +284,14 @@ Manage your reservation:
 
 {{ restaurant_name }}
 """,
-))
+    )
+)
 
-EmailTemplate.register(EmailTemplate(
-    name="reservation_cancelled",
-    subject_template="Your reservation has been cancelled",
-    body_template="""Dear {{ guest_name }},
+EmailTemplate.register(
+    EmailTemplate(
+        name="reservation_cancelled",
+        subject_template="Your reservation has been cancelled",
+        body_template="""Dear {{ guest_name }},
 
 Your reservation at {{ restaurant_name }} has been cancelled.
 
@@ -290,12 +305,14 @@ If you would like to make a new reservation, please visit:
 
 {{ restaurant_name }}
 """,
-))
+    )
+)
 
-EmailTemplate.register(EmailTemplate(
-    name="reservation_reminder",
-    subject_template="Reminder: Your reservation at {{ restaurant_name }} tomorrow",
-    body_template="""Dear {{ guest_name }},
+EmailTemplate.register(
+    EmailTemplate(
+        name="reservation_reminder",
+        subject_template="Reminder: Your reservation at {{ restaurant_name }} tomorrow",
+        body_template="""Dear {{ guest_name }},
 
 This is a reminder of your upcoming reservation at {{ restaurant_name }}.
 
@@ -308,12 +325,14 @@ We look forward to seeing you!
 
 {{ restaurant_name }}
 """,
-))
+    )
+)
 
-EmailTemplate.register(EmailTemplate(
-    name="staff_new_pending",
-    subject_template="New pending reservation requires approval",
-    body_template="""New pending reservation requires your approval.
+EmailTemplate.register(
+    EmailTemplate(
+        name="staff_new_pending",
+        subject_template="New pending reservation requires approval",
+        body_template="""New pending reservation requires your approval.
 
 Guest: {{ guest_name }}
 Email: {{ guest_email }}
@@ -328,12 +347,14 @@ Reservation details:
 Approve or manage this reservation:
 {{ admin_url }}
 """,
-))
+    )
+)
 
-EmailTemplate.register(EmailTemplate(
-    name="staff_reservation_cancelled",
-    subject_template="Guest cancelled reservation",
-    body_template="""A guest has cancelled their reservation.
+EmailTemplate.register(
+    EmailTemplate(
+        name="staff_reservation_cancelled",
+        subject_template="Guest cancelled reservation",
+        body_template="""A guest has cancelled their reservation.
 
 Guest: {{ guest_name }}
 Email: {{ guest_email }}
@@ -347,7 +368,8 @@ Cancelled reservation details:
 View in admin:
 {{ admin_url }}
 """,
-))
+    )
+)
 
 
 # Convenience function for sending emails

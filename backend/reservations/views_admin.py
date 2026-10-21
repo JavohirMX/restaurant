@@ -6,7 +6,6 @@ Provides CRUD operations for reservation management.
 
 import logging
 from datetime import datetime
-from typing import Any
 
 from django.utils import timezone
 from rest_framework import generics, status
@@ -16,8 +15,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.pagination import CursorPagination
-from core.permissions import CanManageRestaurant, IsHost, IsManager
-from reservations.models import Reservation, ReservationSettings, ReservationToken
+from core.permissions import CanManageRestaurant, IsHost
+from reservations.models import Reservation, ReservationSettings
 
 logger = logging.getLogger(__name__)
 

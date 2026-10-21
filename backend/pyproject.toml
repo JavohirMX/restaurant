@@ -26,3 +26,12 @@ dev-dependencies = [
     "responses>=0.25",
     "coverage>=7.4",
 ]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
